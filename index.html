@@ -2,7 +2,11 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0d0820">
 <title>Para Layssa 🌟</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&display=swap" rel="stylesheet">
 <style>
@@ -401,6 +405,48 @@
     box-shadow: 0 0 20px rgba(245,200,66,0.3);
   }
 
+  /* ── MUSIC PLAYER ── */
+  #music-btn {
+    position: fixed;
+    top: 1.2rem;
+    right: 1.2rem;
+    z-index: 30;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(245,200,66,0.5);
+    background: rgba(10,6,25,0.7);
+    color: var(--gold);
+    font-size: 1.2rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(6px);
+    opacity: 0;
+    pointer-events: none;
+    box-shadow: 0 0 15px rgba(245,200,66,0.15);
+  }
+  #music-btn.visible { opacity: 1; pointer-events: all; }
+  #music-btn:hover {
+    background: rgba(245,200,66,0.15);
+    box-shadow: 0 0 25px rgba(245,200,66,0.4);
+    transform: scale(1.1);
+  }
+  #music-btn.playing { animation: musicPulse 2s ease-in-out infinite; }
+  @keyframes musicPulse {
+    0%,100% { box-shadow: 0 0 15px rgba(245,200,66,0.2); }
+    50% { box-shadow: 0 0 30px rgba(245,200,66,0.5); }
+  }
+  #yt-frame-wrap {
+    position: fixed;
+    width: 1px; height: 1px;
+    top: -9999px; left: -9999px;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
   /* ── UI HINTS ── */
   #hint {
     position: fixed;
@@ -477,6 +523,38 @@
   .letter-card::-webkit-scrollbar { width: 4px; }
   .letter-card::-webkit-scrollbar-track { background: transparent; }
   .letter-card::-webkit-scrollbar-thumb { background: rgba(245,200,66,0.3); border-radius: 2px; }
+
+  /* ── MOBILE ── */
+  @media (max-width: 600px) {
+    .letter-card {
+      padding: 2rem 1.5rem;
+      max-height: 90vh;
+      border-radius: 8px;
+    }
+    .letter-name { font-size: 2.2rem; }
+    .letter-text { font-size: 1.05rem; line-height: 1.85; }
+    #letter-panel { padding: 0.8rem; }
+    .btn-start { padding: 0.9rem 2.2rem; font-size: 1.1rem; }
+    .intro-title { font-size: clamp(2.8rem, 13vw, 4rem); }
+    #open-letter-btn { font-size: 1rem; padding: 0.8rem 2rem; bottom: 3rem; }
+    #hint { font-size: 0.82rem; bottom: 1.2rem; }
+    .tower { bottom: 20vh; }
+  }
+
+  /* touch ripple */
+  .touch-ripple {
+    position: fixed;
+    pointer-events: none;
+    z-index: 6;
+    border-radius: 50%;
+    border: 2px solid rgba(245,200,66,0.6);
+    width: 10px; height: 10px;
+    transform: translate(-50%, -50%) scale(1);
+    animation: rippleOut 0.6s ease-out forwards;
+  }
+  @keyframes rippleOut {
+    to { transform: translate(-50%, -50%) scale(8); opacity: 0; }
+  }
 </style>
 </head>
 <body>
@@ -564,6 +642,9 @@
   </div>
 </div>
 
+<!-- MUSIC BUTTON -->
+<button id="music-btn" title="Música">🎵</button>
+
 <!-- INTRO -->
 <div id="intro">
   <p class="intro-subtitle">✦ &nbsp; uma surpresa especial &nbsp; ✦</p>
@@ -576,7 +657,7 @@
 </div>
 
 <!-- HINT -->
-<div id="hint">Clique no céu para lançar lanternas ✨</div>
+<div id="hint">Toque no céu para lançar lanternas ✨</div>
 
 <!-- OPEN LETTER BUTTON -->
 <button id="open-letter-btn" onclick="openLetter()">✦ &nbsp;Ler a carta&nbsp; ✦</button>
@@ -876,6 +957,11 @@ function startMagic() {
   document.getElementById('intro').classList.add('hidden');
   started = true;
   requestAnimationFrame(loop);
+
+  // Inicia música AQUI — dentro do clique do usuário (obrigatório no mobile)
+  initAudio();
+  updateMusicBtn();
+
   // Initial burst of lanterns
   for (let i = 0; i < 6; i++) {
     setTimeout(() => {
@@ -887,23 +973,38 @@ function startMagic() {
   setTimeout(() => {
     document.getElementById('open-letter-btn').classList.add('visible');
     document.getElementById('hint').style.opacity = '1';
+    document.getElementById('music-btn').classList.add('visible');
   }, 2000);
 }
 
-// Click to launch lantern
-canvas.addEventListener('click', (e) => {
+// Touch + Click to launch lanterns (mobile support)
+function launchAt(x, y) {
   if (!started) return;
   for (let i = 0; i < 3; i++) {
     const l = new Lantern(
-      e.clientX + (Math.random() - 0.5) * 60,
-      e.clientY + (Math.random() - 0.5) * 40
+      x + (Math.random() - 0.5) * 60,
+      y + (Math.random() - 0.5) * 40
     );
     l.alpha = 0;
     l.fadeIn = true;
     lanterns.push(l);
   }
-  spawnMagicParticles(e.clientX, e.clientY);
-});
+  spawnMagicParticles(x, y);
+  // ripple effect
+  const r = document.createElement('div');
+  r.className = 'touch-ripple';
+  r.style.left = x + 'px';
+  r.style.top = y + 'px';
+  document.body.appendChild(r);
+  setTimeout(() => r.remove(), 700);
+}
+
+canvas.addEventListener('click', (e) => launchAt(e.clientX, e.clientY));
+
+canvas.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  Array.from(e.changedTouches).forEach(t => launchAt(t.clientX, t.clientY));
+}, { passive: false });
 
 function spawnMagicParticles(x, y) {
   for (let i = 0; i < 10; i++) {
@@ -937,6 +1038,72 @@ function closeLetter() {
     document.getElementById('hint').style.opacity = '1';
   }, 1000);
 }
+
+// ── MÚSICA ──
+let audio = null;
+let musicPlaying = false;
+
+function initAudio() {
+  if (audio) return;
+  // I See The Light - versão instrumental via proxy confiável
+  audio = new Audio();
+  audio.crossOrigin = 'anonymous';
+  audio.loop = true;
+  audio.volume = 0.45;
+
+  // Tenta múltiplas fontes em ordem
+  const sources = [
+    'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3', // fallback teste
+  ];
+
+  // Usar YouTube via iframe com postMessage é a forma mais confiável
+  // Criamos o iframe APÓS o clique do usuário
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'position:fixed;width:1px;height:1px;top:-9999px;left:-9999px;overflow:hidden;';
+  wrap.innerHTML = `<iframe id="yt-frame"
+    src="https://www.youtube.com/embed/9P3RHV1ETPM?autoplay=1&controls=0&loop=1&playlist=9P3RHV1ETPM&mute=0&volume=50"
+    allow="autoplay; encrypted-media"
+    frameborder="0"
+    allowfullscreen>
+  </iframe>`;
+  document.body.appendChild(wrap);
+  musicPlaying = true;
+}
+
+function updateMusicBtn() {
+  const btn = document.getElementById('music-btn');
+  if (musicPlaying) {
+    btn.textContent = '🔇';
+    btn.classList.add('playing');
+    btn.title = 'Pausar música';
+  } else {
+    btn.textContent = '🎵';
+    btn.classList.remove('playing');
+    btn.title = 'Tocar música';
+  }
+}
+
+function toggleMusic() {
+  const frame = document.getElementById('yt-frame');
+  if (!frame) {
+    initAudio();
+    updateMusicBtn();
+    return;
+  }
+  if (musicPlaying) {
+    frame.contentWindow.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*');
+    musicPlaying = false;
+  } else {
+    frame.contentWindow.postMessage('{"event":"command","func":"playVideo","args":""}', '*');
+    musicPlaying = true;
+  }
+  updateMusicBtn();
+}
+
+document.getElementById('music-btn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  toggleMusic();
+});
 
 // Prevent context menu
 document.addEventListener('contextmenu', e => e.preventDefault());
